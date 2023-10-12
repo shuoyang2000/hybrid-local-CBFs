@@ -1,0 +1,6 @@
+README.md
+setup.py
+hybrid_local_CBFs.egg-info/PKG-INFO
+hybrid_local_CBFs.egg-info/SOURCES.txt
+hybrid_local_CBFs.egg-info/dependency_links.txt
+hybrid_local_CBFs.egg-info/top_level.txt

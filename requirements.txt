@@ -3,3 +3,7 @@ jax>=0.3.16
 numpy>=1.18.0
 cbf_opt>=0.6.0
 hj_reachability
+matplotlib
+seaborn
+ipykernel
+tqdm

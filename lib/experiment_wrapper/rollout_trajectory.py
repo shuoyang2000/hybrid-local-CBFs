@@ -61,7 +61,89 @@ class RolloutTrajectory(Experiment):
         if self.u_labels is None:
             self.u_labels = [dynamics.CONTROLS[idi] for idi in self.u_indices]
 
-    def run(self, dynamics: Dynamics, controllers1: Controllers, controllers2: Controllers, switch) -> pd.DataFrame:
+
+    def run(self, dynamics: Dynamics, controllers: Controllers, control_bounds: np.ndarray = None) -> pd.DataFrame:
+        """Overrides Experiment.run for rollout trajectory experiments. Same args as Experiment.run
+
+        At every time step:
+        1) Check whether the control needs to be updated
+        2) Log the current data
+        3) Take step in the simulation
+        """
+        if not isinstance(controllers, dict):
+            controllers = {controllers.__class__.__name__: controllers}
+        self.set_idx_and_labels(dynamics)
+
+        results = []
+        n_sims = self.n_sims_per_start * self.start_x.shape[0]
+        x_sim_start = np.zeros((n_sims, dynamics.n_dims))
+
+        for controller_name, controller in controllers.items():
+            for i in range(0, self.start_x.shape[0]):
+                for j in range(0, self.n_sims_per_start):
+                    x_sim_start[i * self.n_sims_per_start + j, :] = self.start_x[i, :]
+
+            x_current = x_sim_start
+            u_current = np.zeros((n_sims, dynamics.control_dims))
+            if hasattr(controller, "reset_controller"):
+                controller.reset(x_current)
+
+            delta_t = dynamics.dt
+            controller_update_freq = (
+                int(controller.controller_dt / delta_t) if hasattr(controller, "controller_dt") else 1
+            )
+            num_steps = int(self.t_sim / delta_t)
+
+            prog_bar_range = tqdm.tqdm(range(0, num_steps), desc="Controller rollout")
+
+            for tstep in prog_bar_range:
+                t = tstep * delta_t
+
+                ######## UPDATE CONTROLLER ########
+                if tstep % controller_update_freq == 0:
+
+                    u_current = controller(x_current, t).reshape(n_sims, dynamics.control_dims)
+                    if control_bounds is not None:
+                        u_current = np.clip(u_current, control_bounds[0], control_bounds[1])
+                ########### LOGGING ###############
+                for sim_index in range(n_sims):
+                    base_log_packet = {"t": t}
+                    base_log_packet["controller"] = controller_name
+                    base_log_packet["scenario"] = sim_index % self.n_sims_per_start
+                    base_log_packet["rollout"] = sim_index // self.n_sims_per_start
+
+                    if hasattr(controller, "save_info"):
+                        base_log_packet.update(controller.save_info(x_current[sim_index], u_current[sim_index], t))
+
+                    for i, state_index in enumerate(self.x_indices):
+                        log_packet = copy(base_log_packet)
+                        log_packet["measurement"] = self.x_labels[i]
+                        log_packet["value"] = x_current[sim_index, state_index]
+                        results.append(log_packet)
+
+                    for i, control_index in enumerate(self.u_indices):
+                        log_packet = copy(base_log_packet)
+                        log_packet["measurement"] = self.u_labels[i]
+                        log_packet["value"] = u_current[sim_index, control_index]
+                        results.append(log_packet)
+
+                    if hasattr(controller, "save_measurements"):
+                        for key, value in controller.save_measurements(
+                            x_current[sim_index], u_current[sim_index], t
+                        ).items():
+                            log_packet = copy(base_log_packet)
+                            log_packet["measurement"] = key
+                            log_packet["value"] = value
+                            results.append(log_packet)
+
+                ########### SIMULATION ###############
+                x_current = dynamics.step(x_current, u_current, t)
+            # if self.save_location is not None:
+            #     print("Saved results to " + self.save_location + ".csv")
+            #     pd.DataFrame(results).to_csv(self.save_location + ".csv")
+        return pd.DataFrame(results)
+
+    def run_hybrid(self, dynamics1: Dynamics, dynamics2: Dynamics, controllers1: Controllers, controllers2: Controllers, switch) -> pd.DataFrame:
         """Overrides Experiment.run for rollout trajectory experiments. Same args as Experiment.run
 
         At every time step:
@@ -71,6 +153,7 @@ class RolloutTrajectory(Experiment):
         """
         if not isinstance(controllers1, dict):
             controllers = {controllers1.__class__.__name__: controllers1}
+        dynamics = dynamics1
         self.set_idx_and_labels(dynamics)
 
         results = []
@@ -146,16 +229,122 @@ class RolloutTrajectory(Experiment):
                 ########### SIMULATION ###############
                 x_current = dynamics.step(x_current, u_current, t)
                 traj_all = np.concatenate((traj_all, x_current), axis=0)
-                #print(x_current)
+
                 if x_current[0, 0] >= switch and jump_index == 0:
                     if jump_index == 0:
                         print("switching time: ", t)
                     controller = controllers2[controller_name]
                     jump_index = 1
                     jump_state = x_current
-                #print("x_current: ", x_current, x_current.shape)
+                    dynamics = dynamics2
 
         return pd.DataFrame(results), jump_state, traj_all
+
+    def run_hybrid_dubins(self, dynamics: Dynamics, controllers1: Controllers, controllers2: Controllers, controllers3: Controllers, switch, mid_target_position ) -> pd.DataFrame:
+        """Overrides Experiment.run for rollout trajectory experiments. Same args as Experiment.run
+
+        At every time step:
+        1) Check whether the control needs to be updated
+        2) Log the current data
+        3) Take step in the simulation
+        """
+        if not isinstance(controllers1, dict):
+            controllers = {controllers1.__class__.__name__: controllers1}
+        self.set_idx_and_labels(dynamics)
+
+        results = []
+        n_sims = self.n_sims_per_start * self.start_x.shape[0]
+        x_sim_start = np.zeros((n_sims, dynamics.n_dims))
+        
+        
+        assert mid_target_position < switch
+        for controller_name, controller in controllers1.items():
+            jump_index = 0 # 0 is the first mode, 1 is the second mode
+            target_index = 0
+            for i in range(0, self.start_x.shape[0]):
+                for j in range(0, self.n_sims_per_start):
+                    x_sim_start[i * self.n_sims_per_start + j, :] = self.start_x[i, :]
+
+            x_current = x_sim_start
+            traj_all = x_current
+            u_all = np.array([[0., 0.]])
+            print("x_current: ", x_current, x_current.shape)
+            u_current = np.zeros((n_sims, dynamics.control_dims))
+            if hasattr(controller, "reset_controller"):
+                controller.reset(x_current)
+
+            delta_t = dynamics.dt
+            controller_update_freq = (
+                int(controller.controller_dt / delta_t)
+                if hasattr(controller, "controller_dt")
+                else 1
+            )
+            num_steps = int(self.t_sim / delta_t)
+
+            prog_bar_range = tqdm.tqdm(range(0, num_steps), desc="Controller rollout")
+
+            for tstep in prog_bar_range:
+                t = tstep * delta_t
+
+                ######## UPDATE CONTROLLER ########
+                if tstep % controller_update_freq == 0:
+                    u_current = controller(x_current, t).reshape(n_sims, dynamics.control_dims)
+
+                ########### LOGGING ###############
+                for sim_index in range(n_sims):
+                    base_log_packet = {"t": t}
+                    base_log_packet["controller"] = controller_name
+                    base_log_packet["scenario"] = sim_index % self.n_sims_per_start
+                    base_log_packet["rollout"] = sim_index // self.n_sims_per_start
+
+                    if hasattr(controller, "save_info"):
+                        base_log_packet.update(
+                            controller.save_info(x_current[sim_index], u_current[sim_index], t)
+                        )
+
+                    for i, state_index in enumerate(self.x_indices):
+                        log_packet = copy(base_log_packet)
+                        log_packet["measurement"] = self.x_labels[i]
+                        log_packet["value"] = x_current[sim_index, state_index]
+                        #print("log value: ", log_packet["value"])
+                        results.append(log_packet)
+
+                    for i, control_index in enumerate(self.u_indices):
+                        log_packet = copy(base_log_packet)
+                        log_packet["measurement"] = self.u_labels[i]
+                        log_packet["value"] = u_current[sim_index, control_index]
+                        results.append(log_packet)
+
+                    if hasattr(controller, "save_measurements"):
+                        for key, value in controller.save_measurements(
+                            x_current[sim_index], u_current[sim_index], t
+                        ).items():
+                            log_packet = copy(base_log_packet)
+                            log_packet["measurement"] = key
+                            log_packet["value"] = value
+                            results.append(log_packet)
+
+                ########### SIMULATION ###############
+                x_current = dynamics.step(x_current, u_current, t)
+                traj_all = np.concatenate((traj_all, x_current), axis=0)
+                u_all = np.concatenate((u_all, u_current), axis=0)
+                # print(x_current)
+
+                if x_current[0, 0] >= mid_target_position and target_index == 0:
+                    if target_index == 0:
+                        print("target switching time: ", t)
+                    controller = controllers2[controller_name]
+                    target_index = 1
+
+                if x_current[0, 0] >= switch and jump_index == 0:
+                    if jump_index == 0:
+                        print("switching time: ", t)
+                    controller = controllers3[controller_name]
+                    jump_index = 1
+                    jump_state = x_current
+                #print("x_current: ", x_current, x_current.shape)
+
+        return pd.DataFrame(results), jump_state, traj_all, u_all
 
 
 class TimeSeriesExperiment(RolloutTrajectory):
