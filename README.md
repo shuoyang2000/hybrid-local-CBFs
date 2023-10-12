@@ -18,5 +18,8 @@ These libraries have been bundled with the repository as changes have had to be 
 # Reproduce the Results
 Run the two ipynb files in `examples` folder.
 
+# Dataset
+The computed dataset can be found [here](https://drive.google.com/drive/folders/1h9i-3J5y4GGOBtL76qQu95xeUCv3fZKj?usp=sharing)
+
 # TODO
 Refactor dubins car example
