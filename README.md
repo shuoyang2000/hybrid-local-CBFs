@@ -12,7 +12,11 @@ Linux, Mac or WSL is recommended to run this repository since [hj_reachability](
    pip install -r requirements.txt
    ```
 
-Note that some supplementary libraries are included locally (note the 'lib' folder).
+Note that some supplementary libraries are included locally (note the `lib` folder).
 These libraries have been bundled with the repository as changes have had to be made to make them compatible.
 
 # Reproduce the Results
+Run the two ipynb files in `examples` folder.
+
+# TODO
+Refactor dubins car example
