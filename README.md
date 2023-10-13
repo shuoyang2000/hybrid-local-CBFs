@@ -13,13 +13,16 @@ Linux, Mac or WSL is recommended to run this repository since [hj_reachability](
    ```
 
 Note that some supplementary libraries are included locally (note the `lib` folder).
-These libraries have been bundled with the repository as changes have had to be made to make them compatible.
+These libraries have been bundled with the repository as changes have had to be made to make them adaptded to our problem.
 
 # Reproduce the Results
 Run the two ipynb files in `examples` folder.
 
 # Dataset
-The computed dataset can be found [here](https://drive.google.com/drive/folders/1h9i-3J5y4GGOBtL76qQu95xeUCv3fZKj?usp=sharing)
+The computed dataset can be found [here](https://drive.google.com/drive/folders/1ZGvMqZVJg_lxspZMIe7sEDrZ-tsU6R60?usp=sharing)
 
-# TODO
-Refactor dubins car example
+# Related projects
+This project is inspired by a number of related projects, including:
+- [refineCBF: Control Barrier Function refinement with HJ Reachability](https://github.com/UCSD-SASLab/refineCBF)
+- [cbf_opt: Control Barrier Function toolbox](https://github.com/stonkens/cbf_opt)
+- [hj_reachability: Hamilton-Jacobi reachability analysis in JAX](https://github.com/StanfordASL/hj_reachability)
