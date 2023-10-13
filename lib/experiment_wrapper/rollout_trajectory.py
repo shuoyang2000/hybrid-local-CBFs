@@ -240,7 +240,7 @@ class RolloutTrajectory(Experiment):
 
         return pd.DataFrame(results), jump_state, traj_all
 
-    def run_hybrid_dubins(self, dynamics: Dynamics, controllers1: Controllers, controllers2: Controllers, controllers3: Controllers, switch, mid_target_position ) -> pd.DataFrame:
+    def run_hybrid_dubins(self, dynamics: Dynamics, controllers1: Controllers, controllers2: Controllers, switch) -> pd.DataFrame:
         """Overrides Experiment.run for rollout trajectory experiments. Same args as Experiment.run
 
         At every time step:
@@ -256,8 +256,6 @@ class RolloutTrajectory(Experiment):
         n_sims = self.n_sims_per_start * self.start_x.shape[0]
         x_sim_start = np.zeros((n_sims, dynamics.n_dims))
         
-        
-        assert mid_target_position < switch
         for controller_name, controller in controllers1.items():
             jump_index = 0 # 0 is the first mode, 1 is the second mode
             target_index = 0
@@ -330,21 +328,15 @@ class RolloutTrajectory(Experiment):
                 u_all = np.concatenate((u_all, u_current), axis=0)
                 # print(x_current)
 
-                if x_current[0, 0] >= mid_target_position and target_index == 0:
-                    if target_index == 0:
-                        print("target switching time: ", t)
-                    controller = controllers2[controller_name]
-                    target_index = 1
-
                 if x_current[0, 0] >= switch and jump_index == 0:
                     if jump_index == 0:
                         print("switching time: ", t)
-                    controller = controllers3[controller_name]
+                    controller = controllers2[controller_name]
                     jump_index = 1
                     jump_state = x_current
                 #print("x_current: ", x_current, x_current.shape)
 
-        return pd.DataFrame(results), jump_state, traj_all, u_all
+        return pd.DataFrame(results), jump_state, traj_all
 
 
 class TimeSeriesExperiment(RolloutTrajectory):
