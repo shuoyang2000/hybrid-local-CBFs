@@ -26,3 +26,6 @@ This project is inspired by a number of related projects, including:
 - [refineCBF: Control Barrier Function refinement with HJ Reachability](https://github.com/UCSD-SASLab/refineCBF)
 - [cbf_opt: Control Barrier Function toolbox](https://github.com/stonkens/cbf_opt)
 - [hj_reachability: Hamilton-Jacobi reachability analysis in JAX](https://github.com/StanfordASL/hj_reachability)
+
+# TODO
+- Implement a `hybrid_local_cbf` package and make it generalizable enough
